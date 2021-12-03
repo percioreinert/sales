@@ -1,9 +1,15 @@
 package br.pucrs.t2.sales.negocio.entities;
 
+import javax.persistence.*;
+
+@Table(name = "produtos")
+@Entity(name = "Produto")
 public class Produto {
 
+    @Id
+    @Column(name="codigo")
     private Long codigo;
-    private ItemEstoqueDTO itemEstoque;
+
     private String descricao;
     private int preco;
 
@@ -12,6 +18,7 @@ public class Produto {
         this.descricao = descricao;
         this.preco = preco;
     }
+    public Produto(){}
 
     public Long getCodigo() {
         return codigo;
@@ -36,4 +43,3 @@ public class Produto {
                 + "]";
     }
 }
-

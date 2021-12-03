@@ -4,14 +4,19 @@ import br.pucrs.t2.sales.adaptadores.repositories.SalesRepository;
 import br.pucrs.t2.sales.negocio.entities.ItemEstoqueDTO;
 import br.pucrs.t2.sales.negocio.entities.ItemVenda;
 import br.pucrs.t2.sales.negocio.entities.Venda;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class SalesService {
 
+    private final String saveUrl = "http://localhost:8761/estoque/salvar";
+    private final String reqUrl = "http://localhost:8761/estoque/";
     private SalesRepository salesRepository;
     private static long IMPOSTO = 10L;
 
@@ -19,15 +24,16 @@ public class SalesService {
         this.salesRepository = salesRepository;
     }
 
+
     public Integer[] calculaSubtotal(ItemEstoqueDTO[] itens) {
         int subtotal = 0;
         int imposto = 0;
         for (ItemEstoqueDTO it : itens) {
             validaItemEstoque(it, 0);
             int quantidade = it.getQuantidade();
-            // TODO: fazer a chamada para o serviço de estoque
-            it = estoqueService.getItemEstoque(it.getCodigo());
+            it = requestItemEstoque(it.getCodigo());
             validaItemEstoque(it, quantidade);
+            assert it != null;
             subtotal += (int) (it.getProduto().getPreco() * quantidade);
 
         }
@@ -39,29 +45,29 @@ public class SalesService {
         return resp;
     }
 
-    public boolean confirmaVenda(ItemEstoqueDTO[] itens) {
+    public void confirmaVenda(ItemEstoqueDTO[] itens) {
         ArrayList<ItemVenda> listaItemVenda = new ArrayList<>();
         ArrayList<ItemEstoqueDTO> listaItemEstoque = new ArrayList<>();
         Venda venda = new Venda(LocalDateTime.now(), listaItemVenda);
         for (ItemEstoqueDTO item : itens) {
 
             if(item.getProduto() == null)
-                return false;
+                return;
 
             long codigoProduto = item.getCodigo();
             int quantidade = item.getQuantidade();
 
             if(quantidade <= 0)
-                return false;
+                return;
 
             ItemEstoqueDTO itemEstoque = listaItemEstoque.stream().filter(y -> y.getCodigo() == codigoProduto).findFirst().get().orElseThrow(null);
 
             if(itemEstoque == null || itemEstoque.getProduto() == null){
                 // TODO: fazer a chamada para o serviço de estoque
-                itemEstoque = estoqueService.getItemEstoque(codigoProduto);
+                itemEstoque = requestItemEstoque(codigoProduto);
 
                 if(itemEstoque == null || itemEstoque.getProduto() == null)
-                    return false;
+                    return;
 
                 listaItemEstoque.add(itemEstoque);
             }
@@ -71,7 +77,7 @@ public class SalesService {
             if(quantidade >= 0)
                 itemEstoque.setQuantidade(quantidade);
             else
-                return false;
+                return;
 
             ItemVenda itemLista = listaItemVenda.stream().filter(x -> x.getCodigo() == codigoProduto).findFirst().get().orElseThrow(null);
 
@@ -84,8 +90,7 @@ public class SalesService {
         }
         salesRepository.save(venda);
         // TODO: fazer a chamada para o serviço de estoque
-        estoqueService.save(listaItemEstoque);
-        return true;
+        saveItemEstoque(listaItemEstoque);
     }
 
     public Iterable<Venda> vendasEfetuadas() {
@@ -96,7 +101,7 @@ public class SalesService {
         if(qtdade <= 0)
             return false;
         // TODO: fazer a chamada para o serviço de estoque
-        ItemEstoqueDTO item = estoqueService.getItemEstoque(codProd);
+        ItemEstoqueDTO item = requestItemEstoque(codProd);
         if(item == null || qtdade > item.getQuantidade() || item.getQuantidade() - qtdade < 0)
             return false;
 
@@ -115,4 +120,15 @@ public class SalesService {
         if(!errorMessage.isEmpty())
             throw new IllegalArgumentException(errorMessage);
     }
+
+    private void saveItemEstoque(List<ItemEstoqueDTO> listaItemEstoque) {
+        new RestTemplate().put(saveUrl, listaItemEstoque);
+    }
+
+    private ItemEstoqueDTO requestItemEstoque(long cod) {
+        ResponseEntity<ItemEstoqueDTO> responseEntity = new RestTemplate().getForEntity
+                (reqUrl + cod, ItemEstoqueDTO.class);
+        return responseEntity.getBody();
+    }
+
 }
